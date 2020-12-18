@@ -10,7 +10,7 @@ class TestPattern(unittest.TestCase):
 
     @staticmethod
     def _to_list(pattern_instance):
-        return list(map(str, pattern_instance.stack))
+        return list(map(str, pattern_instance.token_stack))
 
     def _transform(self, function):
         self.pattern = function(self.pattern)
@@ -39,19 +39,32 @@ class TestComposition(unittest.TestCase):
 
     def test_quantified_numeric_range(self):
         self.pattern = self.pattern.literal('application.'). \
-            any_number().quantify(minimum=1). \
+            any_number_between().quantify(minimum=1). \
             literal('.log'). \
             case_insensitive()
 
-        expected_regex = re.compile(r'application\.[0-9]+\.log',
-                                    re.IGNORECASE)
-        self.assertEqual(expected_regex, self.pattern.compile())
+        expected = re.compile(r'application\.[0-9]+\.log', re.IGNORECASE)
+        self.assertEqual(expected, self.pattern.compile())
 
     def test_domain_pattern(self):
-        # [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
-        ascii_alpha_numeric = \
-            pattern().any_number(). \
-            lowercase_ascii_letters(). \
-            uppercase_ascii_letters()
+        # Sample domain name pattern
+        expected = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9\-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}')
 
-        print(ascii_alpha_numeric.end_range() + ascii_alpha_numeric.literal('-').quantify(1, 61))
+        ascii_alpha_numeric = pattern(). \
+            lowercase_ascii_letters(). \
+            uppercase_ascii_letters(). \
+            any_number_between()
+
+        domain_pattern = \
+            ascii_alpha_numeric.end_range() + \
+            ascii_alpha_numeric.literal('-').quantify(1, 61)
+
+        # At least one alphanumeric character before the dot and after the dash
+        domain_pattern += ascii_alpha_numeric.end_range()
+        # Add TLD
+        domain_pattern = domain_pattern.literal('.').\
+            lowercase_ascii_letters(closed=False).\
+            uppercase_ascii_letters().\
+            quantify(minimum=2)
+
+        self.assertEqual(expected, domain_pattern.compile())

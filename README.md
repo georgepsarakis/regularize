@@ -11,17 +11,19 @@ Writing complex regular expressions can prove difficult and error-prone. This li
 
 ## Examples
 
+
+
 ```python
-from regex_composer import pattern, finder
+>>> from regex_composer import pattern, finder
 
-logfile_pattern = pattern()
-logfile_pattern = logfile_pattern.\
-                  literal('application.').\
-                  any_number().\
-                  quantify(minimum=1).case_insensitive()
+>>> logfile_pattern = pattern()
+>>> logfile_pattern = logfile_pattern.\
+                      literal('application.').\
+                      any_number_between().\
+                      quantify(minimum=1).case_insensitive()
 
-uncompressed_logfile = logfile_pattern.literal('.log').end_anchor()
-compressed_logfile = logfile_pattern.literal('.log.gz')
+>>> uncompressed_logfile = logfile_pattern.literal('.log').end_anchor()
+>>> compressed_logfile = logfile_pattern.literal('.log.gz')
 
 >>> print(finder(uncompressed_logfile).match('application.1.log'))
 <re.Match object; span=(0, 17), match='application.1.log'>

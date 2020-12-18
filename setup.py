@@ -8,8 +8,10 @@ setup(
     zip_safe=False,
     install_requires=[],
     extras_require={
-        'dev': [
-            'pytest==6.1.0  '
+        "dev": [
+            "pytest==6.1.0",
+            "flake8==3.8.4",
+            "pytest-cov==2.10.1"
         ]
     },
     include_package_data=True,
