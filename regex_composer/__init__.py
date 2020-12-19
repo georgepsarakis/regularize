@@ -1,3 +1,3 @@
-from regex_composer.expression import pattern
-from regex_composer.find import finder
-from regex_composer.replace import Substitution
+from regex_composer.expression import pattern  # noqa: F401
+from regex_composer.find import finder  # noqa: F401
+from regex_composer.replace import substitution  # noqa: F401

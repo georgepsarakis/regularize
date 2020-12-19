@@ -159,7 +159,7 @@ class Pattern(Expression):
         elif minimum == 1 and math.isinf(maximum):
             addition = '+'
         elif minimum == maximum:
-            addition = f'{{minimum}}'
+            addition = f'{{{minimum}}}'
         elif minimum > 1 and math.isinf(maximum):
             addition = f'{{{minimum},}}'
         elif not math.isinf(maximum):
