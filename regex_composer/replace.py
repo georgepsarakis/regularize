@@ -1,9 +1,12 @@
 from functools import lru_cache
-from regex_composer.expression import Pattern
+import typing
+
+if typing.TYPE_CHECKING:
+    from regex_composer.expression import Pattern
 
 
 class Substitution:
-    def __init__(self, pattern: Pattern):
+    def __init__(self, pattern: 'Pattern'):
         self._stack = []
         self._pattern = pattern
         self._compiled_pattern = None
