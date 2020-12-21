@@ -1,4 +1,5 @@
 from collections import deque
+from functools import partialmethod
 import math
 import re
 
@@ -7,7 +8,7 @@ from regex_composer.exceptions import SampleNotMatchedError, \
 from regex_composer.flag import FlagSet
 
 
-class Operator:
+class Metacharacter:
     def __copy__(self):
         return self.__class__()
 
@@ -15,12 +16,12 @@ class Operator:
         return f'\'{self.__class__.__name__} -> {str(self)}\''
 
 
-class OpeningBracket(Operator):
+class OpeningBracket(Metacharacter):
     def __str__(self):
         return '['
 
 
-class ClosingBracket(Operator):
+class ClosingBracket(Metacharacter):
     def __str__(self):
         return ']'
 
@@ -47,13 +48,13 @@ class Expression:
     def bracket_stack(self) -> list:
         return self._bracket_stack
 
-    def has_open_range(self):
+    def has_open_bracket(self):
         if not self.bracket_stack:
             return False
         return isinstance(self.bracket_stack[-1], OpeningBracket)
 
-    def end_range(self):
-        if not self.has_open_range():
+    def close_bracket(self):
+        if not self.has_open_bracket():
             return self
 
         if self.bracket_stack:
@@ -67,7 +68,7 @@ class Expression:
         return self.clone_with_updates(append=ClosingBracket())
 
     def _prepare_for_build(self):
-        return self.end_range()
+        return self.close_bracket()
 
     def build(self):
         return ''.join(map(str, self._prepare_for_build().token_stack))
@@ -105,7 +106,7 @@ class Expression:
         if append:
             for item in append:
                 if isinstance(item, ClosingBracket):
-                    if clone.has_open_range():
+                    if clone.has_open_bracket():
                         clone.bracket_stack.pop()
                 elif isinstance(item, OpeningBracket):
                     clone.bracket_stack.append(item)
@@ -131,12 +132,12 @@ class Pattern(Expression):
     def _on_after_clone(self, new):
         new._flags = FlagSet.copy(pattern=new)
 
-    def group(self, name=None):
+    def group(self, name=None, optional=False):
         # TODO: all open ranges should be closed before applying group
         if name is None:
-            return Group(self)()
+            return Group(self)(optional=optional)
         else:
-            return NamedGroup(self)(name)
+            return NamedGroup(self)(name, optional=optional)
 
     def whitespace(self, match=True) -> 'Pattern':
         return Whitespace(self)(match)
@@ -151,6 +152,7 @@ class Pattern(Expression):
 
     def any_number_between(self, **kwargs):
         return Number(self)(**kwargs)
+    any_number = any_number_between
 
     def quantify(self, minimum=0, maximum=math.inf):
         addition = None
@@ -164,13 +166,47 @@ class Pattern(Expression):
             addition = f'{{{minimum},}}'
         elif not math.isinf(maximum):
             addition = f'{{{minimum},{maximum}}}'
-        return self.end_range().clone_with_updates(append=addition)
+        return self.close_bracket().clone_with_updates(append=addition)
 
-    def wildcard(self):
-        return self.clone_with_updates('.')
+    def wildcard(self, one_or_more=False):
+        if one_or_more:
+            add = '.+'
+        else:
+            add = '.'
+        return self.clone_with_updates(add)
+    match_all = partialmethod(wildcard, one_or_more=True)
 
     def literal(self, string):
         return Literal(self)(string)
+
+    def any_of(self, *members):
+        clone = self.clone_with_updates(append=OpeningBracket())
+        if members:
+            expression = ''.join(
+                map(
+                    str,
+                    map(BracketExpressionPartial.ensure, members)
+                )
+            )
+            clone = clone.clone_with_updates(expression)
+        return clone
+
+    def none_of(self, *members):
+        clone = self.clone_with_updates(append=OpeningBracket())
+        if members:
+            expression = ''.join(
+                map(
+                    str,
+                    map(BracketExpressionPartial.ensure, members)
+                )
+            )
+            clone = clone.clone_with_updates(
+                f"^{expression}"
+            )
+        return clone
+
+    def raw(self, string):
+        return self.clone_with_updates(string)
 
     def start_anchor(self):
         return self.clone_with_updates(append='^')
@@ -179,7 +215,11 @@ class Pattern(Expression):
         return self.clone_with_updates(append='$')
 
     def compile(self):
-        return re.compile(self.build(), self.flags.compile())
+        try:
+            return re.compile(self.build(), self.flags.compile())
+        except re.error as e:
+            print(f'Unable to build regular expression: {self}')
+            raise e
 
     def test(self, sample):
         regex = self.compile()
@@ -206,18 +246,24 @@ class Pattern(Expression):
 
 
 class Group(Pattern):
-    def __call__(self) -> 'Pattern':
-        return self.end_range().clone_with_updates(
+    def __call__(self, optional) -> 'Pattern':
+        append_additions = [')']
+        if optional:
+            append_additions.append('?')
+        return self.close_bracket().clone_with_updates(
             prepend='(',
-            append=')'
+            append=append_additions
         )
 
 
 class NamedGroup(Group):
-    def __call__(self, name) -> 'Pattern':
-        return self.end_range().clone_with_updates(
+    def __call__(self, name, optional) -> 'Pattern':
+        append_additions = [')']
+        if optional:
+            append_additions.append('?')
+        return self.close_bracket().clone_with_updates(
             prepend=('(', f'?P<{name}>'),
-            append=')'
+            append=append_additions
         )
 
 
@@ -232,15 +278,15 @@ class Whitespace(Pattern):
 
 
 class Range(Pattern):
-    def __call__(self, start, end, closed=False, negated=False):
+    def __call__(self, start, end, closed=False, negated=False, skip_brackets=False):
         if negated:
             start = f'^{start}'
 
         additions = []
-        if not self.has_open_range():
+        if not self.has_open_bracket() and not skip_brackets:
             additions.append(OpeningBracket())
         additions.append(f'{start}-{end}')
-        if closed:
+        if closed and not skip_brackets:
             additions.append(ClosingBracket())
         return self.clone_with_updates(append=additions)
 
@@ -260,5 +306,34 @@ class Number(Range):
             )
         return super(Number, self).__call__(minimum, maximum, **kwargs)
 
+
+class BracketExpressionPartial:
+    def __init__(self, expression: str):
+        self._expression = expression
+
+    def __str__(self):
+        return self._expression
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}: {repr(self._expression)}'
+
+    @property
+    def expression(self):
+        return self._expression
+
+    @classmethod
+    def ensure(cls, obj):
+        if not isinstance(obj, cls):
+            return cls(Literal()(obj).build())
+        else:
+            return obj
+
+
+Pattern.ANY_NUMBER = BracketExpressionPartial(Number()(skip_brackets=True).build())
+Pattern.ANY_CHARACTER = BracketExpressionPartial(
+    AsciiLetterCharacter()(skip_brackets=True).build()
+)
+Pattern.NO_WHITESPACE = BracketExpressionPartial(Whitespace()(match=False).build())
+Pattern.ANY_WHITESPACE = BracketExpressionPartial(Whitespace()(match=True).build())
 
 pattern = Pattern

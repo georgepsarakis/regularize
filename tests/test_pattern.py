@@ -53,14 +53,14 @@ class TestComposition(unittest.TestCase):
         ascii_alpha_numeric = pattern(). \
             lowercase_ascii_letters(). \
             uppercase_ascii_letters(). \
-            any_number_between()
+            any_number()
 
         domain_pattern = \
-            ascii_alpha_numeric.end_range() + \
+            ascii_alpha_numeric.close_bracket() + \
             ascii_alpha_numeric.literal('-').quantify(1, 61)
 
         # At least one alphanumeric character before the dot and after the dash
-        domain_pattern += ascii_alpha_numeric.end_range()
+        domain_pattern += ascii_alpha_numeric.close_bracket()
         # Add TLD
         domain_pattern = domain_pattern.literal('.').\
             lowercase_ascii_letters(closed=False).\

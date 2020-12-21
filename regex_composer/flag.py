@@ -8,12 +8,12 @@ if typing.TYPE_CHECKING:
 
 
 class FlagSet:
-    def __init__(self, pattern: Pattern = None):
+    def __init__(self, pattern: 'Pattern' = None):
         self._options = set()
         self._pattern = pattern
 
     @classmethod
-    def copy(cls, pattern: Pattern = None):
+    def copy(cls, pattern: 'Pattern' = None):
         new = cls(pattern=pattern)
         if pattern is not None:
             new._options.update(pattern.flags.options)
