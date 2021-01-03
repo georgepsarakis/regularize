@@ -116,8 +116,13 @@ class Expression:
 
 class Pattern(Expression):
     def __init__(self, *args, **kwargs):
-        super(Pattern, self).__init__(*args, **kwargs)
+        self._extensions = None
         self._flags = None
+        super(Pattern, self).__init__(*args, **kwargs)
+
+    def _copy_state(self, other, clear=True):
+        super(Pattern, self)._copy_state(other, clear=clear)
+        self._extensions = other.extensions.clone()
 
     def __eq__(self, other):
         return self.flags.equals(other.flags) and \
@@ -327,6 +332,67 @@ class BracketExpressionPartial:
             return cls(Literal()(obj).build())
         else:
             return obj
+
+
+class ExtensionRegistry:
+    def __init__(self):
+        self._registrations = {}
+
+    @property
+    def registrations(self):
+        return self._registrations
+
+    def add(self, name, klass):
+        self._registrations[name] = klass
+
+    def __iter__(self):
+        for registration in self._registrations.items():
+            yield registration
+
+    def __contains__(self, item):
+        return item in self._registrations
+
+    def __repr__(self):
+        return repr(self._registrations)
+
+    def clear(self):
+        self._registrations.clear()
+
+
+Pattern.registry = ExtensionRegistry()
+
+
+class Extensions:
+    _registry = Pattern.registry
+
+    def __init__(self, pattern):
+        self._pattern = pattern
+        self._callbacks_initialized = False
+        self._callbacks = {}
+
+    @property
+    def registry(self):
+        return self.__class__._registry
+
+    def clone(self):
+        new = self.__class__(self._pattern)
+        new._callbacks_initialized = False
+        return new
+
+    def _initialize_callbacks(self):
+        if self._callbacks_initialized:
+            return
+
+        for name, klass in self.registry:
+            self._callbacks[name] = klass(self._pattern)
+        self._callbacks_initialized = True
+
+    def __getattr__(self, item):
+        if item in self.registry:
+            self._initialize_callbacks()
+            return self._callbacks[item]
+        else:
+            raise AttributeError(item)
 
 
 Pattern.ANY_NUMBER = BracketExpressionPartial(Number()(skip_brackets=True).build())
