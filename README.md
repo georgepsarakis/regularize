@@ -106,6 +106,72 @@ assert parsed_url.path == url_regex_matches['path']
 assert url_regex_matches['subdomain'] == 'www'
 ```
 
+### Parse HTTP Logs
+
+The following example is taken from the common format sample of the [Apache web server combined log](https://httpd.apache.org/docs/current/logs.html#combined).
+
+```python
+from regex_composer.expression import Pattern, pattern
+
+apache_webserver_combined_log = (
+    '127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] '
+    '"GET /apache_pb.gif HTTP/1.0" 200 2326 "http://www.example.com/start.html" '
+    '"Mozilla/5.0 (Macintosh; Intel Mac OS X 11.1; rv:84.0) Gecko/20100101 Firefox/84.0"'
+)
+
+ip = pattern().any_of('.', Pattern.ANY_NUMBER).quantify(minimum=7).group('ip')
+identd_client_id = pattern().literal('-')
+http_auth_user = pattern().any_of(Pattern.ANY_ASCII_CHARACTER, '_', '.').\
+    at_least_one().group('http_auth_user')
+time = pattern().literal('[').none_of(']').quantify(minimum=26).literal(']')
+http_verb = pattern().literal('"').group('http_verb',
+                                         pattern=pattern().uppercase_ascii_letters().at_least_one())
+url = pattern().group(name='url',
+                      pattern=pattern().none_of(Pattern.ANY_WHITESPACE).at_least_one())
+http_version = pattern().literal('HTTP/').any_of('1', '2').literal('.').\
+    any_of('0', '1').group('http_version').literal('"')
+http_status_code = pattern().group(name='http_status_code',
+                                   pattern=pattern().any_of(Pattern.ANY_NUMBER).exactly(3))
+response_bytes = pattern().group(name='response_bytes_without_headers',
+                                 pattern=pattern().any_of(Pattern.ANY_NUMBER).at_least_one())
+# Note the repetition here. For multiple groups using the same expression,
+# we can create a lambda, e.g:
+# lambda name: pattern().literal('"').group(name=name, pattern=pattern().none_of('"').at_least_one()).literal('"')
+referer = pattern().literal('"').\
+    group(name='referer', pattern=pattern().none_of('"').at_least_one()).literal('"')
+user_agent = pattern().literal('"').\
+    group(name='user_agent', pattern=pattern().none_of('"').at_least_one())
+
+p = Pattern.join(
+    pattern().whitespace(),
+    [ip, identd_client_id, http_auth_user, time,
+     http_verb, url, http_version, http_status_code,
+     response_bytes, referer, user_agent]
+)
+assert {'ip': '127.0.0.1', 'http_auth_user': 'frank', 'http_verb': 'GET', 'url': '/apache_pb.gif',
+             'http_version': 'HTTP/1.0', 'http_status_code': '200', 'response_bytes_without_headers': '2326',
+             'user_agent': 'http://www.example.com/start.html'} == \
+        p.compile().match(apache_webserver_combined_log).groupdict()
+```
+
+### Strip HTML tags
+
+```python
+from regex_composer import pattern
+from regex_composer.replace import substitution
+
+html = '''<h1>Article Title</h1>
+<p>This is a <b>blog post</b></p>'''
+p = pattern().literal('<').any_of('/').quantify(minimum=0).ascii_letters().any_number().at_least_one().literal('>')
+s = substitution(p)
+text = s.replace(html)
+print(text)
+'''
+Article Title
+    This is a blog post
+'''
+```
+
 ## API
 
 ### Pattern Builder
@@ -116,3 +182,52 @@ assert url_regex_matches['subdomain'] == 'www'
 
 ## Extending
 
+### Writing Extensions
+
+Commonly used patterns can be easily added either by creating a sub-class of the `Pattern` class,
+or by using the extension registry.
+
+#### Using a Pattern sub-class
+
+There are two prerequisites for new pattern builder methods:
+- The return value should be a `Pattern` instance.
+- Internal state is not modified, but instead all changes are applied to an instance clone.
+
+```python
+from regex_composer.expression import Pattern
+
+class MyPattern(Pattern):
+    def html_tag(self, opening=True):
+        if opening:
+            new = self.literal('<')
+        else:
+            new = self.literal('</')
+        return new.any_of(Pattern.ANY_ASCII_CHARACTER).at_least_one().literal('>')    
+```  
+
+#### Registering an extension
+
+```python
+from regex_composer.expression import Pattern
+
+class HTMLTag(Pattern):
+    def __call__(self, opening=True):
+        if opening:
+            new = self.literal('<')
+        else:
+            new = self.literal('</')
+        return new.any_of(Pattern.ANY_ASCII_CHARACTER). \
+            quantify(minimum=1).literal('>')
+
+
+p = Pattern()
+# The registry is attached to the Pattern class:
+Pattern.registry.add('html_tag', HTMLTag)
+# But is also accessible through the instance for convenience:
+p.extensions.registry.add('html_tag', HTMLTag)
+# We can now call the pattern wrapper by its given alias, through the `ext` object:
+p = p.ext.html_tag()
+
+print(p.build())
+# <[a-z]+>
+```
