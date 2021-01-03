@@ -136,13 +136,44 @@ class Pattern(Expression):
 
     def _on_after_clone(self, new):
         new._flags = FlagSet.copy(pattern=new)
+        new._extensions = self.extensions.clone()
 
-    def group(self, name=None, optional=False):
-        # TODO: all open ranges should be closed before applying group
-        if name is None:
-            return Group(self)(optional=optional)
+    def group(self, name=None, optional=False, pattern=None):
+        if pattern is None:
+            wrapped_pattern = self
         else:
-            return NamedGroup(self)(name, optional=optional)
+            wrapped_pattern = pattern
+
+        if name is None:
+            new_group = Group(wrapped_pattern)(optional=optional)
+        else:
+            new_group = NamedGroup(wrapped_pattern)(name, optional=optional)
+
+        if pattern is None:
+            return new_group
+        else:
+            return self + new_group
+
+    def match_any(self, *subexpressions, **kwargs):
+        expression_list = [
+            subexpression.build()
+            for subexpression in map(self._ensure_pattern, subexpressions)
+        ]
+        new = self.__class__()
+        new = new.raw('|'.join(expression_list)).group(**kwargs)
+        return self.clone_with_updates(new.build())
+
+    @staticmethod
+    def _ensure_pattern(obj):
+        if isinstance(obj, str):
+            return Literal()(obj)
+        elif isinstance(obj, Pattern):
+            return obj
+        else:
+            raise TypeError(f'Cannot handle type {obj.__class__.__name__} automatically')
+
+    def __or__(self, other):
+        return (self.clone_with_updates(append='|') + other).group()
 
     def whitespace(self, match=True) -> 'Pattern':
         return Whitespace(self)(match)
@@ -163,6 +194,8 @@ class Pattern(Expression):
         addition = None
         if minimum == 0 and math.isinf(maximum):
             addition = '*'
+        elif minimum == 0 and maximum == 1:
+            addition = '?'
         elif minimum == 1 and math.isinf(maximum):
             addition = '+'
         elif minimum == maximum:
@@ -172,6 +205,10 @@ class Pattern(Expression):
         elif not math.isinf(maximum):
             addition = f'{{{minimum},{maximum}}}'
         return self.close_bracket().clone_with_updates(append=addition)
+    at_least_one = partialmethod(quantify, minimum=1, maximum=math.inf)
+
+    def exactly(self, times):
+        return self.quantify(minimum=times, maximum=times)
 
     def wildcard(self, one_or_more=False):
         if one_or_more:
@@ -184,7 +221,7 @@ class Pattern(Expression):
     def literal(self, string):
         return Literal(self)(string)
 
-    def any_of(self, *members):
+    def any_of(self, *members, close=True):
         clone = self.clone_with_updates(append=OpeningBracket())
         if members:
             expression = ''.join(
@@ -194,6 +231,8 @@ class Pattern(Expression):
                 )
             )
             clone = clone.clone_with_updates(expression)
+        if close:
+            clone = clone.close_bracket()
         return clone
 
     def none_of(self, *members):
@@ -248,6 +287,21 @@ class Pattern(Expression):
     def __str__(self):
         initial = super(Pattern, self).__str__()
         return f'{initial}{self.flags}'
+
+    @property
+    def ext(self):
+        if self._extensions is None:
+            self._extensions = Extensions(self)
+        return self._extensions
+    extensions = ext
+
+    @classmethod
+    def join(cls, delimiter, subpatterns):
+        composite_pattern = cls()
+        for subpattern in subpatterns[:-2]:
+            composite_pattern = composite_pattern + subpattern + delimiter
+        composite_pattern = composite_pattern + subpatterns[-1]
+        return composite_pattern
 
 
 class Group(Pattern):
@@ -396,7 +450,7 @@ class Extensions:
 
 
 Pattern.ANY_NUMBER = BracketExpressionPartial(Number()(skip_brackets=True).build())
-Pattern.ANY_CHARACTER = BracketExpressionPartial(
+Pattern.ANY_ASCII_CHARACTER = BracketExpressionPartial(
     AsciiLetterCharacter()(skip_brackets=True).build()
 )
 Pattern.NO_WHITESPACE = BracketExpressionPartial(Whitespace()(match=False).build())
