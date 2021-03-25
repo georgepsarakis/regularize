@@ -1,8 +1,8 @@
 import re
 import unittest
 
-from regex_composer.flag import FlagSet
-from regex_composer.expression import Pattern
+from regularize.flag import FlagSet
+from regularize.expression import Pattern
 
 
 class TestFlagSet(unittest.TestCase):

@@ -4,7 +4,7 @@ import re
 import typing
 
 if typing.TYPE_CHECKING:
-    from regex_composer.expression import Pattern
+    from regularize.expression import Pattern
 
 
 class FlagSet:

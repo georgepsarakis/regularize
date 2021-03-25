@@ -1,6 +1,6 @@
 import unittest
 
-from regex_composer.expression import Pattern, pattern
+from regularize.expression import Pattern, pattern
 
 
 class TestExamples(unittest.TestCase):

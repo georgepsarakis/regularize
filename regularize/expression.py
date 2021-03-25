@@ -3,9 +3,9 @@ from functools import partialmethod
 import math
 import re
 
-from regex_composer.exceptions import SampleNotMatchedError, \
+from regularize.exceptions import SampleNotMatchedError, \
     InvalidRangeError
-from regex_composer.flag import FlagSet
+from regularize.flag import FlagSet
 
 
 class Metacharacter:

@@ -1,4 +1,4 @@
-# Regular Expression Composer
+# regularize - Easily compose regular expressions
 
 ## Motivation
 
@@ -16,7 +16,7 @@ Writing complex regular expressions can prove to be difficult and error-prone. T
 ### Match compressed / uncompressed log filenames
 
 ```python
-from regex_composer import pattern, finder
+from regularize import pattern, finder
 
 # Start a new pattern
 logfile_pattern = pattern()
@@ -47,7 +47,7 @@ print(finder(compressed_logfile).match('application.1.log.gz'))
 ```python
 from urllib.parse import urlparse
 
-from regex_composer import pattern
+from regularize import pattern
 
 # Valid characters for DNS names
 ascii_alphanumeric = pattern().lowercase_ascii_letters(). \
@@ -111,7 +111,7 @@ assert url_regex_matches['subdomain'] == 'www'
 The following example is taken from the common format sample of the [Apache web server combined log](https://httpd.apache.org/docs/current/logs.html#combined).
 
 ```python
-from regex_composer.expression import Pattern, pattern
+from regularize.expression import Pattern, pattern
 
 apache_webserver_combined_log = (
     '127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] '
@@ -157,8 +157,8 @@ assert {'ip': '127.0.0.1', 'http_auth_user': 'frank', 'http_verb': 'GET', 'url':
 ### Strip HTML tags
 
 ```python
-from regex_composer import pattern
-from regex_composer.replace import substitution
+from regularize import pattern
+from regularize.replace import substitution
 
 html = '''<h1>Article Title</h1>
 <p>This is a <b>blog post</b></p>'''
@@ -194,7 +194,7 @@ There are two prerequisites for new pattern builder methods:
 - Internal state is not modified, but instead all changes are applied to an instance clone.
 
 ```python
-from regex_composer.expression import Pattern
+from regularize.expression import Pattern
 
 class MyPattern(Pattern):
     def html_tag(self, opening=True):
@@ -208,7 +208,7 @@ class MyPattern(Pattern):
 #### Registering an extension
 
 ```python
-from regex_composer.expression import Pattern
+from regularize.expression import Pattern
 
 class HTMLTag(Pattern):
     def __call__(self, opening=True):
