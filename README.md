@@ -1,5 +1,7 @@
 # regularize - Easily compose regular expressions
 
+![Github Actions Status](https://github.com/georgepsarakis/regularize/actions/workflows/python-app.yml/badge.svg)
+
 ## Motivation
 
 Writing complex regular expressions can prove to be difficult and error-prone. This library aims to provide a simple interface for constructing patterns, finding matches and performing substitutions.
