@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setup(
     name="regularize",
-    version="0.0.2",
+    version="0.0.4",
     author="George Psarakis",
     description="Regular Expression Builder",
     long_description=readme,
