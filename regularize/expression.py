@@ -1,7 +1,9 @@
+from collections.abc import MutableMapping
 from collections import deque
 from functools import partialmethod
 import math
 import re
+from functools import wraps
 
 from regularize.exceptions import SampleNotMatchedError, \
     InvalidRangeError
@@ -24,6 +26,14 @@ class OpeningBracket(Metacharacter):
 class ClosingBracket(Metacharacter):
     def __str__(self):
         return ']'
+
+
+class Or(Metacharacter):
+    def __str__(self):
+        return '|'
+
+    def combine(self, *expressions):
+        return str(self).join(expressions)
 
 
 class Expression:
@@ -125,31 +135,28 @@ class Pattern(Expression):
         self._extensions = other.extensions.clone()
 
     def __eq__(self, other):
-        return self.flags.equals(other.flags) and \
+        return self.flags == other.flags and \
                self.token_stack == other.token_stack
 
     @property
     def flags(self):
         if self._flags is None:
-            self._flags = FlagSet(pattern=self)
+            self._flags = FlagSet()
         return self._flags
 
     def _on_after_clone(self, new):
-        new._flags = FlagSet.copy(pattern=new)
+        new._flags = self.flags.copy()
         new._extensions = self.extensions.clone()
 
-    def group(self, name=None, optional=False, pattern=None):
-        if pattern is None:
+    def group(self, name=None, optional=False, wrapped=None):
+        if wrapped is None:
             wrapped_pattern = self
         else:
-            wrapped_pattern = pattern
+            wrapped_pattern = wrapped
 
-        if name is None:
-            new_group = Group(wrapped_pattern)(optional=optional)
-        else:
-            new_group = NamedGroup(wrapped_pattern)(name, optional=optional)
+        new_group = Group(wrapped_pattern)(name=name, optional=optional)
 
-        if pattern is None:
+        if wrapped is None:
             return new_group
         else:
             return self + new_group
@@ -159,8 +166,7 @@ class Pattern(Expression):
             subexpression.build()
             for subexpression in map(self._ensure_pattern, subexpressions)
         ]
-        new = self.__class__()
-        new = new.raw('|'.join(expression_list)).group(**kwargs)
+        new = self.__class__().raw(Or().combine(expression_list)).group(**kwargs)
         return self.clone_with_updates(new.build())
 
     @staticmethod
@@ -173,13 +179,14 @@ class Pattern(Expression):
             raise TypeError(f'Cannot handle type {obj.__class__.__name__} automatically')
 
     def __or__(self, other):
-        return (self.clone_with_updates(append='|') + other).group()
+        return (self.clone_with_updates(append=Or()) + other).group()
 
     def whitespace(self, match=True) -> 'Pattern':
         return Whitespace(self)(match)
 
     def lowercase_ascii_letters(self, **kwargs):
         return AsciiLetterCharacter(self)(lowercase=True, **kwargs)
+
     # Alias due to high frequency use (along with case-insensitive flag)
     ascii_letters = lowercase_ascii_letters
 
@@ -188,6 +195,7 @@ class Pattern(Expression):
 
     def any_number_between(self, **kwargs):
         return Number(self)(**kwargs)
+
     any_number = any_number_between
 
     def quantify(self, minimum=0, maximum=math.inf):
@@ -205,6 +213,7 @@ class Pattern(Expression):
         elif not math.isinf(maximum):
             addition = f'{{{minimum},{maximum}}}'
         return self.close_bracket().clone_with_updates(append=addition)
+
     at_least_one = partialmethod(quantify, minimum=1, maximum=math.inf)
 
     def exactly(self, times):
@@ -216,6 +225,7 @@ class Pattern(Expression):
         else:
             add = '.'
         return self.clone_with_updates(add)
+
     match_all = partialmethod(wildcard, one_or_more=True)
 
     def literal(self, string):
@@ -272,27 +282,36 @@ class Pattern(Expression):
             raise SampleNotMatchedError(f'{regex} tested with "{sample}"')
         return match
 
-    def case_insensitive(self, enabled=True):
-        return self.clone().flags.case_insensitive(enabled=enabled)
+    def case_insensitive(self, enabled=True) -> 'Pattern':
+        clone = self.clone()
+        clone.flags.case_insensitive(enabled=enabled)
+        return clone
 
     def multiline(self, enabled=True):
-        return self.clone().flags.multiline(enabled=enabled)
+        clone = self.clone()
+        clone.flags.multiline(enabled=enabled)
+        return clone
 
     def dot_matches_newline(self, enabled=True):
-        return self.clone().flags.dot_matches_newline(enabled=enabled)
+        clone = self.clone()
+        clone.flags.dot_matches_newline(enabled=enabled)
+        return clone
 
     def ascii_only(self, enabled=True):
-        return self.clone().flags.ascii_only(enabled=enabled)
+        clone = self.clone()
+        clone.flags.ascii_only(enabled=enabled)
+        return clone
 
     def __str__(self):
         initial = super(Pattern, self).__str__()
         return f'{initial}{self.flags}'
 
     @property
-    def ext(self):
+    def ext(self) -> 'ExtensionRegistry':
         if self._extensions is None:
-            self._extensions = Extensions(self)
+            self._extensions = ExtensionRegistry(self)
         return self._extensions
+
     extensions = ext
 
     @classmethod
@@ -305,26 +324,17 @@ class Pattern(Expression):
 
 
 class Group(Pattern):
-    def __call__(self, optional) -> 'Pattern':
-        append_additions = [')']
+    def __call__(self, name=None, optional=False) -> 'Pattern':
+        add_right = [')']
         if optional:
-            append_additions.append('?')
+            add_right.append('?')
+        add_left = ['(']
+        if name is not None:
+            add_left.append(f'?P<{name}>')
         return self.close_bracket().clone_with_updates(
-            prepend='(',
-            append=append_additions
+            prepend=add_left,
+            append=add_right
         )
-
-
-class NamedGroup(Group):
-    def __call__(self, name, optional) -> 'Pattern':
-        append_additions = [')']
-        if optional:
-            append_additions.append('?')
-        return self.close_bracket().clone_with_updates(
-            prepend=('(', f'?P<{name}>'),
-            append=append_additions
-        )
-
 
 class Literal(Pattern):
     def __call__(self, string):
@@ -388,45 +398,34 @@ class BracketExpressionPartial:
             return obj
 
 
-class ExtensionRegistry:
-    def __init__(self):
-        self._registrations = {}
-
-    @property
-    def registrations(self):
-        return self._registrations
-
-    def add(self, name, klass):
-        self._registrations[name] = klass
-
-    def __iter__(self):
-        for registration in self._registrations.items():
-            yield registration
-
-    def __contains__(self, item):
-        return item in self._registrations
-
-    def __repr__(self):
-        return repr(self._registrations)
-
-    def clear(self):
-        self._registrations.clear()
-
-
-Pattern.registry = ExtensionRegistry()
-
-
-class Extensions:
-    _registry = Pattern.registry
-
-    def __init__(self, pattern):
+class ExtensionRegistry(MutableMapping):
+    def __init__(self, pattern: Pattern):
+        self._registry = {}
         self._pattern = pattern
         self._callbacks_initialized = False
         self._callbacks = {}
 
+    def __setitem__(self, key, value):
+        self._registry[key] = value
+
+    def __delitem__(self, key):
+        del self._registry[key]
+
+    def __len__(self):
+        return len(self._registry)
+
+    def __getitem__(self, item):
+        return self._registry[item]
+
+    def __iter__(self):
+        return iter(self._registry)
+
+    def __repr__(self):
+        return repr(self._registry)
+
     @property
     def registry(self):
-        return self.__class__._registry
+        return self._registry
 
     def clone(self):
         new = self.__class__(self._pattern)
@@ -437,14 +436,25 @@ class Extensions:
         if self._callbacks_initialized:
             return
 
-        for name, klass in self.registry:
+        for name, klass in self.registry.items():
             self._callbacks[name] = klass(self._pattern)
         self._callbacks_initialized = True
+
+    def _ensure_clone(self, fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            if not isinstance(result, Pattern):
+                raise ValueError(type(result))
+            if result is self._pattern:
+                raise ValueError('pattern instance clone required')
+            return result
+        return wrapper
 
     def __getattr__(self, item):
         if item in self.registry:
             self._initialize_callbacks()
-            return self._callbacks[item]
+            return self._ensure_clone(self._callbacks[item])
         else:
             raise AttributeError(item)
 
@@ -455,5 +465,3 @@ Pattern.ANY_ASCII_CHARACTER = BracketExpressionPartial(
 )
 Pattern.NO_WHITESPACE = BracketExpressionPartial(Whitespace()(match=False).build())
 Pattern.ANY_WHITESPACE = BracketExpressionPartial(Whitespace()(match=True).build())
-
-pattern = Pattern

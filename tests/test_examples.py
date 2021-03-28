@@ -1,6 +1,6 @@
 import unittest
 
-from regularize.expression import Pattern, pattern
+from regularize import Pattern, pattern
 
 
 class TestExamples(unittest.TestCase):
@@ -14,7 +14,7 @@ class TestExamples(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        Pattern.registry.clear()
+        self.pattern.extensions.clear()
 
     def test_html_tag_extension(self):
         class HTMLTag(Pattern):
@@ -25,7 +25,7 @@ class TestExamples(unittest.TestCase):
                     new = self.literal('</')
                 return new.any_of(Pattern.ANY_ASCII_CHARACTER). \
                     quantify(minimum=1).literal('>')
-        self.pattern.ext.registry.add('html_tag', HTMLTag)
+        self.pattern.ext.registry['html_tag'] = HTMLTag
         self.assertEqual(self.pattern.ext.html_tag().build(), '<[a-z]+>')
 
     def test_apache_combined_log_parsing(self):
@@ -36,24 +36,24 @@ class TestExamples(unittest.TestCase):
         time = pattern().literal('[').none_of(']').quantify(minimum=26).literal(']')
         http_verb = pattern().literal('"').group(
             'http_verb',
-            pattern=pattern().uppercase_ascii_letters().at_least_one())
+            wrapped=pattern().uppercase_ascii_letters().at_least_one())
         url = pattern().group(
             name='url',
-            pattern=pattern().none_of(Pattern.ANY_WHITESPACE).at_least_one())
+            wrapped=pattern().none_of(Pattern.ANY_WHITESPACE).at_least_one())
         http_version = pattern().literal('HTTP/').any_of('1', '2').literal('.').\
             any_of('0', '1').group('http_version').literal('"')
         http_status_code = pattern().group(
             name='http_status_code',
-            pattern=pattern().any_of(Pattern.ANY_NUMBER).exactly(3))
+            wrapped=pattern().any_of(Pattern.ANY_NUMBER).exactly(3))
         response_bytes = pattern().group(
             name='response_bytes_without_headers',
-            pattern=pattern().any_of(Pattern.ANY_NUMBER).at_least_one())
+            wrapped=pattern().any_of(Pattern.ANY_NUMBER).at_least_one())
         referer = pattern().literal('"').\
             group(name='referer',
-                  pattern=pattern().none_of('"').at_least_one()).literal('"')
+                  wrapped=pattern().none_of('"').at_least_one()).literal('"')
         user_agent = pattern().literal('"').\
             group(name='user_agent',
-                  pattern=pattern().none_of('"').at_least_one())
+                  wrapped=pattern().none_of('"').at_least_one())
 
         p = Pattern.join(
             pattern().whitespace(),

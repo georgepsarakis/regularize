@@ -1,7 +1,7 @@
 import unittest
 import re
 
-from regularize.expression import Pattern, pattern
+from regularize import Pattern, pattern
 
 
 class TestPattern(unittest.TestCase):

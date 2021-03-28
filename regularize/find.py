@@ -124,7 +124,6 @@ class Finder:
 
     @classmethod
     def cache_clear(cls):
-        # TODO: avoid access to protected methods
         return cls._match._cache.clear()
 
 
