@@ -1,6 +1,6 @@
 # regularize - Easily compose regular expressions
 
-![Github Actions Status](https://github.com/georgepsarakis/regularize/actions/workflows/python-app.yml/badge.svg)
+![Github Actions Status](https://github.com/georgepsarakis/regularize/actions/workflows/python-app.yml/badge.svg) [![PyPI version](https://badge.fury.io/py/regularize.svg)](https://badge.fury.io/py/regularize)
 
 ## Motivation
 
